@@ -474,7 +474,7 @@ let openEt=null;
 const EMOJIS=['👍','❤️','🔥','😂','😮','💀','🎉','💯','😢','👀'];
 
 // ── HELPERS ────────────────────────────────────────
-const toEmail = u => u.toLowerCase().replace(/[^a-z0-9_]/g,'')+'@schoolapp.com';
+const toEmail = u => u.toLowerCase().replace(/[^a-z0-9_]/g,'')+'@schoolapp.app';
 const dmId    = (a,b) => [a,b].sort().join('__');
 const init    = n => (n||'?').slice(0,2).toUpperCase();
 const esc     = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -933,3 +933,4 @@ window.closeSb=()=>{ document.getElementById('sb').classList.remove('open'); doc
 </script>
 </body>
 </html>
+
