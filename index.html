@@ -41,10 +41,12 @@ input,textarea,button{font-family:inherit;}
 .inp{width:100%;padding:11px 14px;background:var(--s3);border:1px solid var(--border);border-radius:var(--r2);color:var(--t1);font-size:14px;outline:none;transition:border-color var(--tr);margin-bottom:12px;}
 .inp:focus{border-color:var(--accent);}
 .inp::placeholder{color:var(--t4);}
+.inp:disabled{opacity:.5;cursor:not-allowed;}
 .btn-p{width:100%;padding:12px;background:var(--ad);border:none;border-radius:var(--r2);color:#fff;font-size:14px;font-weight:700;cursor:pointer;transition:var(--tr);}
-.btn-p:hover{background:var(--accent);box-shadow:0 6px 20px rgba(99,102,241,.4);}
-.btn-p:active{transform:scale(.98);}
-.aerr{font-size:13px;color:var(--rose);margin-top:10px;min-height:18px;}
+.btn-p:hover:not(:disabled){background:var(--accent);box-shadow:0 6px 20px rgba(99,102,241,.4);}
+.btn-p:active:not(:disabled){transform:scale(.98);}
+.btn-p:disabled{opacity:.55;cursor:not-allowed;}
+.aerr{font-size:13px;color:var(--rose);margin-top:10px;min-height:18px;line-height:1.4;}
 
 /* ── SHARED BTN VARIANTS ── */
 .btn-g{background:var(--s3);color:var(--t2);border:1px solid var(--border);border-radius:var(--r2);cursor:pointer;transition:var(--tr);}
@@ -449,9 +451,6 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, si
 import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, addDoc, getDocs, collection, query, orderBy, limit, onSnapshot, where, arrayUnion, arrayRemove, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 🔥 PASTE YOUR FIREBASE CONFIG HERE
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const FB = {
   apiKey: "AIzaSyDNMt0bgAbjFxjunAz_fP4LIi_g5N2QSuk",
   authDomain: "am-hair-and-beauty.firebaseapp.com",
@@ -488,6 +487,36 @@ function openM(id){ document.getElementById(id).style.display='flex'; }
 function avHtml(av,nm){ return av?`<img src="${esc(av)}" alt="" loading="lazy"/>`:`<span>${init(nm)}</span>`; }
 function setAv(el,av,nm){ el.innerHTML=avHtml(av,nm); }
 
+// ── FRIENDLY ERROR MESSAGES ────────────────────────
+function friendlyErr(e){
+  switch(e.code){
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':       return 'Wrong username or password.';
+    case 'auth/email-already-in-use': return 'Username already registered — try logging in instead.';
+    case 'auth/weak-password':        return 'Password must be at least 6 characters.';
+    case 'auth/too-many-requests':    return 'Too many attempts — wait a few minutes and try again.';
+    case 'auth/network-request-failed': return 'Network error — check your internet connection.';
+    case 'auth/operation-not-allowed':
+    case 'auth/configuration-not-found':
+      return '⚠️ Email/Password login is not enabled. Go to Firebase Console → Authentication → Sign-in method → Enable Email/Password.';
+    case 'auth/invalid-api-key':
+    case 'auth/invalid-app-credential':
+      return '⚠️ Invalid Firebase API key — double-check your config.';
+    default: return e.message || e.code || 'Something went wrong.';
+  }
+}
+
+// ── AUTH LOADING STATE ─────────────────────────────
+function setAuthLoading(on){
+  const btn=document.getElementById('auth-btn');
+  const au=document.getElementById('au');
+  const ap=document.getElementById('ap');
+  btn.disabled=on; au.disabled=on; ap.disabled=on;
+  if(on) btn.textContent='Please wait…';
+  else btn.textContent=authMode==='login'?'Log In':'Sign Up';
+}
+
 async function getP(uid){
   if(pc[uid]) return pc[uid];
   try{ const s=await getDoc(doc(db,'users',uid)); const p=s.exists()?s.data():{username:uid,displayName:uid,avatar:'',status:''}; pc[uid]=p; return p; }
@@ -496,51 +525,83 @@ async function getP(uid){
 function invP(uid){ delete pc[uid]; }
 
 // ── PRESENCE ───────────────────────────────────────
-async function goOnline(uid){ await setDoc(doc(db,'presence',uid),{online:true,ts:serverTimestamp()},{merge:true}); }
-async function goOffline(uid){ if(!uid)return; await setDoc(doc(db,'presence',uid),{online:false,ts:serverTimestamp()},{merge:true}); }
+async function goOnline(uid){ try{ await setDoc(doc(db,'presence',uid),{online:true,ts:serverTimestamp()},{merge:true}); }catch{} }
+async function goOffline(uid){ if(!uid)return; try{ await setDoc(doc(db,'presence',uid),{online:false,ts:serverTimestamp()},{merge:true}); }catch{} }
 function watchPres(uids,cb){ uids.forEach(uid=>{ const u=onSnapshot(doc(db,'presence',uid),s=>{ onl[uid]=!!(s.data()||{}).online; cb(); }); unsubs.push(u); }); }
 
 // ── AUTH ───────────────────────────────────────────
 let authMode='login';
 window.setTab=m=>{ authMode=m; document.getElementById('tlog').classList.toggle('on',m==='login'); document.getElementById('tsig').classList.toggle('on',m==='signup'); document.getElementById('auth-btn').textContent=m==='login'?'Log In':'Sign Up'; };
+
 window.doAuth=async()=>{
-  const u=document.getElementById('au').value.trim(), p=document.getElementById('ap').value;
-  const err=document.getElementById('aerr'); err.textContent='';
-  if(!u||!p){err.textContent='Fill in both fields.';return;}
+  const u=document.getElementById('au').value.trim();
+  const p=document.getElementById('ap').value;
+  const err=document.getElementById('aerr');
+  err.textContent='';
+
+  if(!u||!p){ err.textContent='Fill in both fields.'; return; }
+  if(p.length<6){ err.textContent='Password must be at least 6 characters.'; return; }
+
+  setAuthLoading(true);
+
   try{
     if(authMode==='signup'){
       const cl=u.toLowerCase().replace(/[^a-z0-9_]/g,'');
-      if(cl.length<3){err.textContent='Username needs 3+ chars (letters, numbers, _).';return;}
+      if(cl.length<3){ err.textContent='Username needs 3+ chars (letters, numbers, _).'; setAuthLoading(false); return; }
+
+      // Check username not taken
       const ex=await getDocs(query(collection(db,'users'),where('username','==',cl)));
-      if(!ex.empty){err.textContent='Username taken.';return;}
+      if(!ex.empty){ err.textContent='Username already taken — try another.'; setAuthLoading(false); return; }
+
       const cr=await createUserWithEmailAndPassword(auth,toEmail(cl),p);
-      await setDoc(doc(db,'users',cr.user.uid),{username:cl,displayName:cl,avatar:'',status:'',friends:[],uid:cr.user.uid});
-    } else { await signInWithEmailAndPassword(auth,toEmail(u),p); }
+      await setDoc(doc(db,'users',cr.user.uid),{
+        username:cl, displayName:cl, avatar:'', status:'', friends:[], uid:cr.user.uid
+      });
+      // onAuthStateChanged will handle the rest
+    } else {
+      await signInWithEmailAndPassword(auth,toEmail(u),p);
+      // onAuthStateChanged will handle the rest
+    }
   } catch(e){
-    const msg = e.message || e.code || 'Unknown error';
-    if(e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found') err.textContent='Wrong username or password.';
-    else if(e.code==='auth/too-many-requests') err.textContent='Too many attempts — wait a few minutes and try again.';
-    else if(e.code==='auth/invalid-email') err.textContent='Invalid email format.';
-    else if(e.code==='auth/network-request-failed') err.textContent='Network error — check your internet connection.';
-    else if(e.code==='auth/operation-not-allowed') err.textContent='Email/Password login is not enabled in Firebase Console. Go to Authentication → Sign-in method → Enable Email/Password.';
-    else if(e.code==='auth/configuration-not-found') err.textContent='Firebase Auth not set up. Enable Email/Password in Firebase Console → Authentication → Sign-in method.';
-    else err.textContent = msg;
+    err.textContent=friendlyErr(e);
+    setAuthLoading(false);
   }
 };
 
-onAuthStateChanged(auth,async user=>{
+onAuthStateChanged(auth, async user=>{
   if(user){
-    const s=await getDoc(doc(db,'users',user.uid));
-    if(!s.exists()){await signOut(auth);return;}
-    ME={uid:user.uid,...s.data()}; pc[ME.uid]=ME;
-    await goOnline(ME.uid);
-    window.addEventListener('beforeunload',()=>goOffline(ME.uid));
-    boot();
+    try{
+      const s=await getDoc(doc(db,'users',user.uid));
+      if(!s.exists()){
+        // User exists in Auth but not Firestore — create their profile
+        // This can happen if signup was interrupted
+        const username=user.email.replace('@flickchat.app','');
+        await setDoc(doc(db,'users',user.uid),{
+          username, displayName:username, avatar:'', status:'', friends:[], uid:user.uid
+        });
+        const s2=await getDoc(doc(db,'users',user.uid));
+        ME={uid:user.uid,...s2.data()};
+      } else {
+        ME={uid:user.uid,...s.data()};
+      }
+      pc[ME.uid]=ME;
+      await goOnline(ME.uid);
+      window.addEventListener('beforeunload',()=>goOffline(ME.uid));
+      setAuthLoading(false);
+      boot();
+    } catch(e){
+      // Firestore read failed — most likely rules blocking it
+      document.getElementById('aerr').textContent=
+        '⚠️ Could not load your profile. Check Firestore rules allow authenticated reads on the "users" collection.';
+      setAuthLoading(false);
+      await signOut(auth);
+    }
   } else {
     ME=null;
     document.getElementById('auth').style.display='flex';
     document.getElementById('app').classList.remove('on');
     unsubs.forEach(u=>u()); unsubs=[];
+    setAuthLoading(false);
   }
 });
 
@@ -559,12 +620,24 @@ function renderFoot(){
 
 // ── CHANNELS ──────────────────────────────────────
 async function loadChs(){
-  const s=await getDocs(collection(db,'channels'));
-  allChs=[];
-  s.forEach(d=>allChs.push({id:d.id,...d.data()}));
-  if(!allChs.length){ await setDoc(doc(db,'channels','general'),{name:'general',createdAt:serverTimestamp()}); allChs=[{id:'general',name:'general'}]; }
-  renderChList();
-  if(!CONVO) selectConvo({type:'channel',id:allChs[0].id,name:allChs[0].name});
+  try{
+    const s=await getDocs(collection(db,'channels'));
+    allChs=[];
+    s.forEach(d=>allChs.push({id:d.id,...d.data()}));
+    if(!allChs.length){
+      await setDoc(doc(db,'channels','general'),{name:'general',createdAt:serverTimestamp()});
+      allChs=[{id:'general',name:'general'}];
+    }
+    renderChList();
+    if(!CONVO) selectConvo({type:'channel',id:allChs[0].id,name:allChs[0].name});
+  } catch(e){
+    document.getElementById('msgs').innerHTML=
+      `<div style="padding:20px;color:var(--rose);font-size:13px">
+        ⚠️ Could not load channels: ${esc(e.message)}<br><br>
+        Make sure your Firestore rules allow authenticated users to read/write.<br>
+        <code style="font-size:11px;color:var(--t2)">allow read, write: if request.auth != null;</code>
+      </div>`;
+  }
 }
 function renderChList(){
   document.getElementById('ch-list').innerHTML=allChs.map(c=>`
@@ -732,7 +805,19 @@ function refreshMbar(){ if(CONVO&&CONVO.type!=='channel')renderMbar(); }
 
 // ── MESSAGES ──────────────────────────────────────
 function getMsgsRef(){ if(!CONVO)return null; if(CONVO.type==='channel')return collection(db,'channels',CONVO.id,'messages'); if(CONVO.type==='dm')return collection(db,'dms',CONVO.id,'messages'); if(CONVO.type==='gc')return collection(db,'groupchats',CONVO.id,'messages'); }
-function listenMsgs(){ const ref=getMsgsRef(); if(!ref)return; const q=query(ref,orderBy('ts'),limit(80)); unsubMsgs=onSnapshot(q,async s=>{ const msgs=[]; s.forEach(d=>msgs.push({id:d.id,...d.data()})); await renderMsgs(msgs); }); }
+function listenMsgs(){
+  const ref=getMsgsRef(); if(!ref)return;
+  const q=query(ref,orderBy('ts'),limit(80));
+  unsubMsgs=onSnapshot(q, async s=>{
+    const msgs=[]; s.forEach(d=>msgs.push({id:d.id,...d.data()})); await renderMsgs(msgs);
+  }, e=>{
+    document.getElementById('msgs').innerHTML=
+      `<div style="padding:20px;color:var(--rose);font-size:13px">
+        ⚠️ Could not load messages: ${esc(e.message)}<br><br>
+        Check your Firestore rules allow authenticated reads.
+      </div>`;
+  });
+}
 
 async function renderMsgs(msgs){
   const wrap=document.getElementById('msgs');
@@ -785,7 +870,12 @@ window.sendMsg=async()=>{
   const ref=getMsgsRef(); if(!ref)return;
   const data={uid:ME.uid,text,ts:serverTimestamp(),reactions:{}};
   if(REPLY){data.replyTo={id:REPLY.id,author:REPLY.author,text:REPLY.text};}
-  await addDoc(ref,data);
+  try{
+    await addDoc(ref,data);
+  } catch(e){
+    toast('Could not send: '+e.message);
+    inp.value=text; autoResize(inp); // restore on failure
+  }
   REPLY=null; document.getElementById('rstrip').classList.remove('on');
 };
 window.handleKey=e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} };
@@ -795,17 +885,19 @@ window.autoResize=el=>{ el.style.height='auto'; el.style.height=Math.min(el.scro
 window.setReply=(id,author,text)=>{ REPLY={id,author,text}; document.getElementById('rstrip-name').textContent=author; document.getElementById('rstrip').classList.add('on'); document.getElementById('minput').focus(); };
 window.cancelReply=()=>{ REPLY=null; document.getElementById('rstrip').classList.remove('on'); };
 window.scrollToMsg=id=>{ const el=document.getElementById('msg-'+id); if(el)el.scrollIntoView({behavior:'smooth',block:'center'}); };
-window.delMsg=async id=>{ const ref=getMsgsRef(); if(!ref)return; await updateDoc(doc(ref,id),{deleted:true,text:''}); };
+window.delMsg=async id=>{ const ref=getMsgsRef(); if(!ref)return; try{ await updateDoc(doc(ref,id),{deleted:true,text:''}); }catch(e){ toast('Delete failed: '+e.message); } };
 
 // ── REACTIONS ─────────────────────────────────────
 window.toggleEt=(e,id)=>{ e.stopPropagation(); const tr=document.getElementById('et-'+id); const vis=tr.style.display!=='none'; document.querySelectorAll('.et').forEach(t=>t.style.display='none'); openEt=null; if(!vis){tr.style.display='flex';openEt=id;} };
 window.pickEmoji=(e,id,emoji)=>{ e.stopPropagation(); toggleReact(id,emoji); document.querySelectorAll('.et').forEach(t=>t.style.display='none'); openEt=null; };
 window.toggleReact=async(id,emoji)=>{
   const ref=getMsgsRef(); if(!ref)return;
-  const snap=await getDoc(doc(ref,id)); if(!snap.exists())return;
-  const reactions=snap.data().reactions||{};
-  if(reactions[ME.uid]===emoji){delete reactions[ME.uid];}else{reactions[ME.uid]=emoji;}
-  await updateDoc(doc(ref,id),{reactions});
+  try{
+    const snap=await getDoc(doc(ref,id)); if(!snap.exists())return;
+    const reactions=snap.data().reactions||{};
+    if(reactions[ME.uid]===emoji){delete reactions[ME.uid];}else{reactions[ME.uid]=emoji;}
+    await updateDoc(doc(ref,id),{reactions});
+  } catch(e){ toast('React failed: '+e.message); }
 };
 document.addEventListener('click',()=>{ if(openEt){document.getElementById('et-'+openEt)?.style.setProperty('display','none');openEt=null;} });
 
