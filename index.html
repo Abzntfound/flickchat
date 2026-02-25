@@ -516,7 +516,16 @@ window.doAuth=async()=>{
       const cr=await createUserWithEmailAndPassword(auth,toEmail(cl),p);
       await setDoc(doc(db,'users',cr.user.uid),{username:cl,displayName:cl,avatar:'',status:'',friends:[],uid:cr.user.uid});
     } else { await signInWithEmailAndPassword(auth,toEmail(u),p); }
-  } catch(e){ err.textContent=e.message.replace('Firebase: ','').replace(/\(.*\)/,'').trim(); }
+  } catch(e){
+    const msg = e.message || e.code || 'Unknown error';
+    if(e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found') err.textContent='Wrong username or password.';
+    else if(e.code==='auth/too-many-requests') err.textContent='Too many attempts — wait a few minutes and try again.';
+    else if(e.code==='auth/invalid-email') err.textContent='Invalid email format.';
+    else if(e.code==='auth/network-request-failed') err.textContent='Network error — check your internet connection.';
+    else if(e.code==='auth/operation-not-allowed') err.textContent='Email/Password login is not enabled in Firebase Console. Go to Authentication → Sign-in method → Enable Email/Password.';
+    else if(e.code==='auth/configuration-not-found') err.textContent='Firebase Auth not set up. Enable Email/Password in Firebase Console → Authentication → Sign-in method.';
+    else err.textContent = msg;
+  }
 };
 
 onAuthStateChanged(auth,async user=>{
@@ -832,4 +841,3 @@ window.closeSb=()=>{ document.getElementById('sb').classList.remove('open'); doc
 </script>
 </body>
 </html>
-
