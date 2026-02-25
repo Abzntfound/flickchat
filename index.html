@@ -539,28 +539,21 @@ window.doAuth=async()=>{
   const err=document.getElementById('aerr');
   err.textContent='';
 
-  if(!u||!p){ err.textContent='Fill in both fields.'; return; }
-  if(p.length<6){ err.textContent='Password must be at least 6 characters.'; return; }
+  if(!u||!p){err.textContent='Fill in both fields.';return;}
+  if(p.length<6){err.textContent='Password must be at least 6 characters.';return;}
 
   setAuthLoading(true);
 
   try{
     if(authMode==='signup'){
       const cl=u.toLowerCase().replace(/[^a-z0-9_]/g,'');
-      if(cl.length<3){ err.textContent='Username needs 3+ chars (letters, numbers, _).'; setAuthLoading(false); return; }
-
-      // Check username not taken
-      const ex=await getDocs(query(collection(db,'users'),where('username','==',cl)));
-      if(!ex.empty){ err.textContent='Username already taken — try another.'; setAuthLoading(false); return; }
-
+      if(cl.length<3){err.textContent='Username needs 3+ chars (letters, numbers, _).';setAuthLoading(false);return;}
       const cr=await createUserWithEmailAndPassword(auth,toEmail(cl),p);
       await setDoc(doc(db,'users',cr.user.uid),{
-        username:cl, displayName:cl, avatar:'', status:'', friends:[], uid:cr.user.uid
+        username:cl,displayName:cl,avatar:'',status:'',friends:[],uid:cr.user.uid
       });
-      // onAuthStateChanged will handle the rest
     } else {
       await signInWithEmailAndPassword(auth,toEmail(u),p);
-      // onAuthStateChanged will handle the rest
     }
   } catch(e){
     err.textContent=friendlyErr(e);
@@ -933,4 +926,5 @@ window.closeSb=()=>{ document.getElementById('sb').classList.remove('open'); doc
 </script>
 </body>
 </html>
+
 
