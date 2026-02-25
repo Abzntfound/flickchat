@@ -482,8 +482,8 @@ const fmtT    = ts => { if(!ts) return ''; const d=ts.toDate?ts.toDate():new Dat
 const fmtD    = ts => { if(!ts) return ''; const d=ts.toDate?ts.toDate():new Date(ts); const n=new Date(); if(d.toDateString()===n.toDateString()) return 'Today'; const y=new Date(n); y.setDate(y.getDate()-1); if(d.toDateString()===y.toDateString()) return 'Yesterday'; return d.toLocaleDateString([],{month:'long',day:'numeric'}); };
 
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),2800); }
-function closeM(id){ document.getElementById(id).style.display='none'; }
-function openM(id){ document.getElementById(id).style.display='flex'; }
+window.closeM=id=>{ document.getElementById(id).style.display='none'; }
+window.openM=id=>{ document.getElementById(id).style.display='flex'; }
 function avHtml(av,nm){ return av?`<img src="${esc(av)}" alt="" loading="lazy"/>`:`<span>${init(nm)}</span>`; }
 function setAv(el,av,nm){ el.innerHTML=avHtml(av,nm); }
 
@@ -926,5 +926,6 @@ window.closeSb=()=>{ document.getElementById('sb').classList.remove('open'); doc
 </script>
 </body>
 </html>
+
 
 
