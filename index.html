@@ -297,7 +297,7 @@ input,textarea,button{font-family:inherit;}
       </div>
     </div>
 
-    <div class="sbscr">
+    <div class="sbscr">  
       <div class="sec">Channels <button onclick="openM('m-newch')" title="Add channel">＋</button></div>
       <div id="ch-list"></div>
       <div class="sec">Direct Messages <button onclick="openDMModal()" title="New DM">＋</button></div>
@@ -528,6 +528,13 @@ function invP(uid){ delete pc[uid]; }
 // ── PRESENCE ───────────────────────────────────────
 async function goOnline(uid){ try{ await setDoc(doc(db,'presence',uid),{online:true,ts:serverTimestamp()},{merge:true}); }catch{} }
 async function goOffline(uid){ if(!uid)return; try{ await setDoc(doc(db,'presence',uid),{online:false,ts:serverTimestamp()},{merge:true}); }catch{} }
+function setupPresence(uid){
+  goOnline(uid);
+  document.addEventListener('visibilitychange',()=>{ document.visibilityState==='visible'?goOnline(uid):goOffline(uid); });
+  window.addEventListener('focus',()=>goOnline(uid));
+  window.addEventListener('blur',()=>goOffline(uid));
+  window.addEventListener('beforeunload',()=>goOffline(uid));
+}
 function watchPres(uids,cb){ uids.forEach(uid=>{ const u=onSnapshot(doc(db,'presence',uid),s=>{ onl[uid]=!!(s.data()||{}).online; cb(); }); unsubs.push(u); }); }
 
 // ── AUTH ───────────────────────────────────────────
@@ -579,8 +586,7 @@ onAuthStateChanged(auth, async user=>{
         ME={uid:user.uid,...s.data()};
       }
       pc[ME.uid]=ME;
-      await goOnline(ME.uid);
-      window.addEventListener('beforeunload',()=>goOffline(ME.uid));
+      setupPresence(ME.uid);
       setAuthLoading(false);
       boot();
     } catch(e){
@@ -748,8 +754,13 @@ function listenGCs(){ const u=onSnapshot(query(collection(db,'groupchats'),where
 function renderGCList(){
   const el=document.getElementById('gc-list');
   if(!myGCs.length){el.innerHTML='';return;}
-  el.innerHTML=myGCs.map(gc=>`<div class="row${CONVO?.id===gc.id?' on':''}" onclick="selectConvo({type:'gc',id:'${gc.id}',name:'${esc(gc.name)}',members:${JSON.stringify(gc.members)}})"><span class="ri">👥</span><span class="rn">${esc(gc.name)}</span></div>`).join('');
+  el.innerHTML=myGCs.map(gc=>`<div class="row${CONVO?.id===gc.id?' on':''}" onclick="selectGC('${gc.id}')"><span class="ri">👥</span><span class="rn">${esc(gc.name)}</span></div>`).join('');
 }
+window.selectGC=id=>{
+  const gc=myGCs.find(g=>g.id===id);
+  if(!gc)return;
+  selectConvo({type:'gc',id:gc.id,name:gc.name,members:gc.members});
+};
 window.openGCModal=async()=>{
   gcSel=[];
   const el=document.getElementById('gc-flist');
@@ -821,6 +832,7 @@ async function renderMsgs(msgs){
   let html='',lastDay='';
   for(const m of msgs){
     const p=pc[m.uid]||{displayName:m.uid,username:m.uid,avatar:''};
+    const isOnMsg=onl[m.uid];
     const nm=p.displayName||p.username||m.uid;
     const mine=m.uid===ME.uid;
     const day=fmtD(m.ts);
@@ -837,7 +849,7 @@ async function renderMsgs(msgs){
       ?`<div class="mdel">🚫 Message deleted</div>`
       :`${rqHtml}<div class="bub${mine?' me':''}">${esc(m.text||'')}</div>${rcHtml}`;
     html+=`<div class="mg" id="msg-${m.id}">
-      <div class="av sz36" onclick="showProfile(event,'${m.uid}')" style="cursor:pointer;flex-shrink:0;align-self:flex-start;margin-top:2px">${avHtml(p.avatar,nm)}</div>
+      <div class="av sz36" onclick="showProfile(event,'${m.uid}')" style="cursor:pointer;flex-shrink:0;align-self:flex-start;margin-top:2px">${avHtml(p.avatar,nm)}${isOnMsg?'<div class="odot"></div>':''}</div>
       <div class="mright">
         <div class="mmeta">
           <span class="mauth" style="color:${mine?'var(--accent)':'var(--t1)'}" onclick="showProfile(event,'${m.uid}')">${esc(nm)}</span>
@@ -927,6 +939,7 @@ window.closeSb=()=>{ document.getElementById('sb').classList.remove('open'); doc
 </script>
 </body>
 </html>
+
 
 
 
